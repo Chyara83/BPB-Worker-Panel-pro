@@ -1,0 +1,40 @@
+name: Prepare BPB 4.5.0 User Management
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Save Wrangler configuration
+        run: cp wrangler.jsonc /tmp/wrangler.jsonc
+
+      - name: Fetch BPB 4.5.0 User Management commit
+        run: |
+          git fetch https://github.com/javadSharifi/BPB-Worker-Panel-pro.git 571f472
+
+      - name: Create production branch from BPB 4.5.0
+        run: |
+          git checkout -b production-users FETCH_HEAD
+          cp /tmp/wrangler.jsonc wrangler.jsonc
+
+      - name: Commit Wrangler configuration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add wrangler.jsonc
+          git commit -m "Prepare BPB 4.5.0 with Cloudflare Wrangler config" || true
+
+      - name: Push production branch
+        run: |
+          git push origin production-users
