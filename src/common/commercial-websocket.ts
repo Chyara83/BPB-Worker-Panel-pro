@@ -4,7 +4,7 @@ import { TrOverWSHandler } from '@trojan';
 import { HttpStatus } from '@common';
 
 export async function handleCommercialWebsocket(request: Request, env: Env): Promise<Response> {
-    const encodedPathConfig = globalThis.globalConfig.pathName.replace("/", "");
+    const encodedPathConfig = new URL(request.url).pathname.replace(/^\//, '');
     try {
         const { protocol, mode, panelIPs } = JSON.parse(atob(encodedPathConfig));
         globalThis.wsConfig = { ...globalThis.wsConfig, wsProtocol: protocol, proxyMode: mode, panelIPs };
