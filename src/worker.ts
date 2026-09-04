@@ -1,8 +1,10 @@
 import { init, initHttp, initWs } from '@init';
-import { fallback, serveIcon, renderSecrets, handlePanel, handleSubscriptions, handleLogin, logout, renderError, handleDoH, handleProxyIPs, handleUserSub } from '@handlers';
+import { fallback, serveIcon, renderSecrets, handlePanel, handleSubscriptions, handleLogin, logout, renderError, handleDoH, handleProxyIPs } from '@handlers';
 import { handleCommercialWebsocket } from '@common/commercial-websocket';
 import { handleCommercialUserSub } from '@common/commercial-subscription';
+import { handleCommercialUsers } from '@common/commercial-users';
 import { handleTelegramWebhook } from '@telegram';
+export { UserUsageDO } from '@commercial/user-usage-do';
 
 export default {
 	async fetch(request: Request, env: Env) {
@@ -13,10 +15,11 @@ export default {
 				initWs(env);
 				return await handleCommercialWebsocket(request, env);
 			}
-			const { pathName } = globalThis.globalConfig;
-		const path = pathName.split('/')[1];
+			const pathName = new URL(request.url).pathname;
+			const path = pathName.split('/')[1];
 			if (path === 'telegram') return await handleTelegramWebhook(request, env);
 			initHttp(request, env);
+			if (pathName === '/panel/users' || pathName.startsWith('/panel/users/')) return await handleCommercialUsers(request, env);
 			switch (path) {
 				case 'panel': return await handlePanel(request, env);
 				case 'sub':
