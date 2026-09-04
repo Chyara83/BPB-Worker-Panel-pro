@@ -28,7 +28,7 @@ export class UserUsageGuard {
     }
 
     flush(): void {
-        if (!this.acquired || this.closed || this.pendingBytes <= 0) return;
+        if (!this.acquired || this.pendingBytes <= 0) return;
         const bytes = this.pendingBytes;
         this.pendingBytes = 0;
         this.chain = this.chain.then(async () => {
@@ -43,9 +43,9 @@ export class UserUsageGuard {
 
     async close(): Promise<void> {
         if (this.closed) return;
-        this.closed = true;
         this.flush();
         await this.chain;
+        this.closed = true;
         if (this.acquired) {
             this.acquired = false;
             await releaseUserSession(this.user, this.env);
