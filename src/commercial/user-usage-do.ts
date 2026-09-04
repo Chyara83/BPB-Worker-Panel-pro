@@ -49,8 +49,7 @@ export class UserUsageDO extends DurableObject<Env> {
         if (state.quotaBytes > 0 && state.usedBytes >= state.quotaBytes) return { ok: false, reason: 'quota', ...state };
         if (state.activeSessions >= state.maxConnections) return { ok: false, reason: 'limit', ...state };
         this.ctx.storage.sql.exec('UPDATE usage SET active_sessions = active_sessions + 1 WHERE id = 1');
-        const next = this.load();
-        return { ok: true, reason: 'ok', ...next };
+        return { ok: true, reason: 'ok', ...this.load() };
     }
 
     async release(): Promise<void> {
@@ -61,11 +60,8 @@ export class UserUsageDO extends DurableObject<Env> {
     async consume(bytes: number): Promise<{ ok: boolean; accepted: number; usedBytes: number; quotaBytes: number }> {
         this.ensureSchema();
         const amount = Math.max(0, Math.floor(bytes));
-        if (!amount) {
-            const state = this.load();
-            return { ok: true, accepted: 0, usedBytes: state.usedBytes, quotaBytes: state.quotaBytes };
-        }
         const state = this.load();
+        if (!amount) return { ok: true, accepted: 0, usedBytes: state.usedBytes, quotaBytes: state.quotaBytes };
         if (state.quotaBytes <= 0) {
             this.ctx.storage.sql.exec('UPDATE usage SET used_bytes = used_bytes + ? WHERE id = 1', amount);
             return { ok: true, accepted: amount, usedBytes: state.usedBytes + amount, quotaBytes: state.quotaBytes };
