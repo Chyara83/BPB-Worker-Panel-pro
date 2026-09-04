@@ -19,6 +19,8 @@
             "@handlers": ["./src/common/handlers"],
             "@init": ["./src/common/init"],
             "@common": ["./src/common/common"],
+            "@common/*": ["./src/common/*"],
+            "@commercial/*": ["./src/commercial/*"],
             "@vless": ["./src/protocols/websocket/vless"],
             "@trojan": ["./src/protocols/websocket/trojan"],
             "@warp": ["./src/protocols/warp"],
