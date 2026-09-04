@@ -1,11 +1,7 @@
 import { findUserByTrojanPassword, getStatus } from '@users';
 import { sha224 } from '@commercial/sha224';
 import { UserUsageGuard, byteLength } from '@commercial/usage-guard';
-import {
-    handleTCPOutBound,
-    makeReadableWebSocketStream,
-    safeCloseTcpSocket
-} from './common';
+import { handleTCPOutBound, makeReadableWebSocketStream, safeCloseTcpSocket } from './common';
 
 export async function TrOverWSHandler(request: Request, env: Env): Promise<Response> {
     const webSocketPair = new WebSocketPair();
@@ -36,10 +32,7 @@ export async function TrOverWSHandler(request: Request, env: Env): Promise<Respo
                 usageGuard = new UserUsageGuard(user, env, webSocket);
                 await usageGuard.start();
                 const originalSend = webSocket.send.bind(webSocket);
-                webSocket.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
-                    usageGuard?.track(byteLength(data));
-                    originalSend(data);
-                };
+                webSocket.send = (data: any) => { usageGuard?.track(byteLength(data)); originalSend(data); };
             }
             await handleTCPOutBound(remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, null, log);
         },
@@ -78,28 +71,13 @@ async function parseTrHeader(buffer: ArrayBuffer, env: Env) {
     let addressIndex = 2;
     let address = "";
     switch (atype) {
-        case 1:
-            addressLength = 4;
-            address = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength)).join(".");
-            break;
-        case 3:
-            addressLength = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + 1))[0];
-            addressIndex += 1;
-            address = new TextDecoder().decode(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
-            break;
-        case 4: {
-            addressLength = 16;
-            const dataView = new DataView(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
-            const ipv6 = [];
-            for (let i = 0; i < 8; i++) ipv6.push(dataView.getUint16(i * 2).toString(16));
-            address = ipv6.join(":");
-            break;
-        }
+        case 1: addressLength = 4; address = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength)).join("."); break;
+        case 3: addressLength = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + 1))[0]; addressIndex += 1; address = new TextDecoder().decode(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength)); break;
+        case 4: { addressLength = 16; const dataView = new DataView(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength)); const ipv6 = []; for (let i = 0; i < 8; i++) ipv6.push(dataView.getUint16(i * 2).toString(16)); address = ipv6.join(":"); break; }
         default: return { hasError: true, message: `invalid addressType is ${atype}` };
     }
     if (!address) return { hasError: true, message: `address is empty, addressType is ${atype}` };
     const portIndex = addressIndex + addressLength;
-    const portBuffer = socks5DataBuffer.slice(portIndex, portIndex + 2);
-    const portRemote = new DataView(portBuffer).getUint16(0);
+    const portRemote = new DataView(socks5DataBuffer.slice(portIndex, portIndex + 2)).getUint16(0);
     return { hasError: false, addressRemote: address, portRemote, rawClientData: socks5DataBuffer.slice(portIndex + 4), user };
 }
