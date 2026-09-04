@@ -1,5 +1,6 @@
 import { isValidUUID } from '@common';
 import { findUserByVlessUUID, getStatus } from '@users';
+import { UserUsageGuard, byteLength } from '@commercial/usage-guard';
 import {
     safeCloseTcpSocket,
     handleTCPOutBound,
@@ -15,8 +16,7 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
 
     let address = "";
     let portWithRandomLog = "";
-    let authenticatedUser: string | null = null;
-    let authenticationChecked = false;
+    let usageGuard: UserUsageGuard | null = null;
 
     const log = (info: string, event?: string) => {
         console.log(`[${address}:${portWithRandomLog}] ${info}`, event || "");
@@ -31,6 +31,7 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
 
     const writableStream = new WritableStream({
         async write(chunk) {
+            if (usageGuard) usageGuard.track(byteLength(chunk));
             if (isDns && udpStreamWrite) {
                 return udpStreamWrite(chunk);
             }
@@ -48,10 +49,14 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
 
             const user = await findUserByVlessUUID(presentedUUID, env);
             if (user) {
-                const status = getStatus(user);
-                if (status !== 'active') throw new Error(`user ${status}`);
-                authenticatedUser = user.username;
-                authenticationChecked = true;
+                if (getStatus(user) !== 'active') throw new Error(`user ${getStatus(user)}`);
+                usageGuard = new UserUsageGuard(user, env, webSocket);
+                await usageGuard.start();
+                const originalSend = webSocket.send.bind(webSocket);
+                webSocket.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+                    usageGuard?.track(byteLength(data));
+                    originalSend(data);
+                };
             } else if (presentedUUID !== userID) {
                 throw new Error("invalid user");
             }
@@ -96,11 +101,13 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
                 log
             );
         },
-        close() {
+        async close() {
             safeCloseTcpSocket(remoteSocketWapper.value);
+            if (usageGuard) await usageGuard.close();
         },
         abort(reason) {
             log(`readableWebSocketStream is abort`, JSON.stringify(reason));
+            void usageGuard?.close();
         },
     });
 
@@ -109,6 +116,7 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
         .catch(error => {
             log("readableWebSocketStream pipeTo error", error);
             safeCloseTcpSocket(remoteSocketWapper.value);
+            void usageGuard?.close();
         });
 
     return new Response(null, {
@@ -123,15 +131,12 @@ function extractUUID(VLBuffer: ArrayBuffer): string | null {
 }
 
 function parseVlHeader(VLBuffer: ArrayBuffer, userID: string) {
-    if (VLBuffer.byteLength < 24) {
-        return { hasError: true, message: "invalid data" };
-    }
+    if (VLBuffer.byteLength < 24) return { hasError: true, message: "invalid data" };
     const version = new Uint8Array(VLBuffer.slice(0, 1));
     const slicedBuffer = new Uint8Array(VLBuffer.slice(1, 17));
     const slicedBufferString = stringify(slicedBuffer);
     const isValidUser = slicedBufferString === userID;
     if (!isValidUser) return { hasError: true, message: "invalid user" };
-
     const optLength = new Uint8Array(VLBuffer.slice(17, 18))[0];
     const command = new Uint8Array(VLBuffer.slice(18 + optLength, 18 + optLength + 1))[0];
     let isUDP = false;
@@ -141,7 +146,6 @@ function parseVlHeader(VLBuffer: ArrayBuffer, userID: string) {
     } else {
         return { hasError: true, message: `command ${command} is not supported, command 01-tcp,02-udp,03-mux` };
     }
-
     const portIndex = 18 + optLength + 1;
     const portBuffer = VLBuffer.slice(portIndex, portIndex + 2);
     const portRemote = new DataView(portBuffer).getUint16(0);
