@@ -48,7 +48,10 @@ export async function createUser(username: string, days: number, note: string, e
     return { success: true, message: 'User created.', user };
 }
 
-export async function getUser(username: string, env: Env): Promise<UserData | null> { return await env.kv.get(`user:${username}`, { type: 'json' }); }
+export async function getUser(username: string, env: Env): Promise<UserData | null> {
+    const raw = await env.kv.get(`user:${username}`, { type: 'json' }) as UserData | null;
+    return raw ? normalizeUser(raw) : null;
+}
 
 export async function listUsers(env: Env): Promise<UserData[]> {
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
@@ -86,9 +89,9 @@ export async function deleteUser(username: string, env: Env): Promise<{ success:
     if (!user) return { success: false, message: 'User not found.' };
     await Promise.all([
         env.kv.delete(`user:${username}`),
-        env.kv.delete(`user:vless:${user.vlessUUID}`),
-        env.kv.delete(`user:trojan:${user.trojanPassword}`),
-        env.kv.delete(`user:trojan-hash:${sha224(user.trojanPassword)}`)
+        user.vlessUUID ? env.kv.delete(`user:vless:${user.vlessUUID}`) : Promise.resolve(),
+        user.trojanPassword ? env.kv.delete(`user:trojan:${user.trojanPassword}`) : Promise.resolve(),
+        user.trojanPassword ? env.kv.delete(`user:trojan-hash:${sha224(user.trojanPassword)}`) : Promise.resolve()
     ]);
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
     await env.kv.put('users:index', JSON.stringify(index.filter(u => u !== username)));
@@ -97,19 +100,23 @@ export async function deleteUser(username: string, env: Env): Promise<{ success:
 
 export async function findUserBySubPath(subPath: string, env: Env): Promise<UserData | null> {
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
-    for (const username of index) { const user = await getUser(username, env); if (user && user.subPath === subPath) return normalizeUser(user); }
+    for (const username of index) { const user = await getUser(username, env); if (user && user.subPath === subPath) return user; }
     return null;
 }
-export async function findUserByVlessUUID(uuid: string, env: Env): Promise<UserData | null> { const username = await env.kv.get(`user:vless:${uuid}`); const user = username ? await getUser(username, env) : null; return user ? normalizeUser(user) : null; }
+export async function findUserByVlessUUID(uuid: string, env: Env): Promise<UserData | null> {
+    const username = await env.kv.get(`user:vless:${uuid}`);
+    const user = username ? await getUser(username, env) : null;
+    return user;
+}
 export async function findUserByTrojanPassword(passwordHash: string, env: Env): Promise<UserData | null> {
     const username = await env.kv.get(`user:trojan-hash:${passwordHash}`);
-    if (username) { const user = await getUser(username, env); return user ? normalizeUser(user) : null; }
+    if (username) return await getUser(username, env);
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
     for (const name of index) {
         const user = await getUser(name, env);
-        if (user && sha224(user.trojanPassword) === passwordHash) {
+        if (user?.trojanPassword && sha224(user.trojanPassword) === passwordHash) {
             await env.kv.put(`user:trojan-hash:${passwordHash}`, name);
-            return normalizeUser(user);
+            return user;
         }
     }
     return null;
