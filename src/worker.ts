@@ -8,11 +8,11 @@ import {
 	handleLogin,
 	logout,
 	renderError,
-	handleWebsocket,
 	handleDoH,
 	handleProxyIPs,
 	handleUserSub
 } from '@handlers';
+import { handleCommercialWebsocket } from '@common/commercial-websocket';
 import { handleTelegramWebhook } from '@telegram';
 
 export default {
@@ -23,7 +23,7 @@ export default {
 
 			if (upgradeHeader === 'websocket') {
 				initWs(env);
-				return await handleWebsocket(request);
+				return await handleCommercialWebsocket(request, env);
 			} else {
 				const { pathName } = globalThis.globalConfig;
 				const path = pathName.split('/')[1];
@@ -38,32 +38,32 @@ export default {
 				case 'panel':
 					return await handlePanel(request, env);
 
-					case 'sub':
-						if (pathName.startsWith('/sub/user/')) {
-							return await handleUserSub(request, env);
-						}
-						return await handleSubscriptions(request, env);
+				case 'sub':
+					if (pathName.startsWith('/sub/user/')) {
+						return await handleUserSub(request, env);
+					}
+					return await handleSubscriptions(request, env);
 
-					case 'login':
-						return await handleLogin(request, env);
+				case 'login':
+					return await handleLogin(request, env);
 
-					case 'logout':
-						return logout();
+				case 'logout':
+					return logout();
 
-					case 'secrets':
-						return await renderSecrets();
+				case 'secrets':
+					return await renderSecrets();
 
-					case 'favicon.ico':
-						return await serveIcon();
+				case 'favicon.ico':
+					return await serveIcon();
 
-					case 'dns-query':
-						return await handleDoH(request);
+				case 'dns-query':
+					return await handleDoH(request);
 
-					case 'proxy-ip':
-						return await handleProxyIPs(request, env);
+				case 'proxy-ip':
+					return await handleProxyIPs(request, env);
 
-					default:
-						return await fallback(request);
+				default:
+					return await fallback(request);
 				}
 			}
 		} catch (error) {
