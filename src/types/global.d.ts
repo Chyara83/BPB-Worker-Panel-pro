@@ -13,7 +13,7 @@ declare global {
     }
     var settings: Settings; var globalConfig: GlobalConfig; var httpConfig: HttpConfig; var wsConfig: WsConfig;
     var dict: { readonly _VL_: string; readonly _VL_CAP_: string; readonly _VM_: string; readonly _TR_: string; readonly _TR_CAP_: string; readonly _SS_: string; readonly _V2_: string; readonly _project_: string; readonly _website_: string; readonly _public_proxy_ip_: string; };
-    interface GeoAsset { rule: boolean; type: string; geosite: string; ipv4?: string; geositeURL?: string; geoipURL?: string; dns?: string; format?: string; }
+    interface GeoAsset { rule: boolean; type: string; geosite: string; geoip?: string; geositeURL?: string; geoipURL?: string; dns?: string; format?: string; }
     const __VERSION__: string; const __ERROR_HTML_CONTENT__: string; const __ICON__: string; const __PANEL_HTML_CONTENT__: string; const __LOGIN_HTML_CONTENT__: string; const __SECRETS_HTML_CONTENT__: string; const __PROXY_IP_HTML_CONTENT__: string;
     interface Array<T> { concatIf<T>(condition: boolean, concat: T | T[]): T[]; }
     interface Object { omitEmpty<T>(): T | undefined; timestamp?: number; }
