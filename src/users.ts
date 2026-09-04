@@ -10,6 +10,8 @@ export interface UserData {
     vlessUUID: string;
     trojanPassword: string;
     maxConnections: number;
+    quotaGb: number;
+    quotaBytes: number;
 }
 
 function generateSubPath(): string { return crypto.randomUUID(); }
@@ -19,10 +21,11 @@ function generatePassword(): string {
     return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function createUser(username: string, days: number, note: string, env: Env, maxConnections = 1): Promise<{ success: boolean; message: string; user?: UserData }> {
+export async function createUser(username: string, days: number, note: string, env: Env, maxConnections = 1, quotaGb = 0): Promise<{ success: boolean; message: string; user?: UserData }> {
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return { success: false, message: 'Invalid username. Use 3-20 alphanumeric characters or underscores.' };
     if (!Number.isFinite(days) || days <= 0 || days > 3650) return { success: false, message: 'Invalid subscription duration.' };
     if (!Number.isInteger(maxConnections) || maxConnections < 1 || maxConnections > 5) return { success: false, message: 'Connection limit must be between 1 and 5.' };
+    if (!Number.isFinite(quotaGb) || quotaGb < 0 || quotaGb > 100000) return { success: false, message: 'Traffic quota must be between 0 and 100000 GB. Use 0 for unlimited.' };
 
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
     if (index.includes(username)) return { success: false, message: 'Username already exists.' };
@@ -32,7 +35,9 @@ export async function createUser(username: string, days: number, note: string, e
     const trojanPassword = generatePassword();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + days * 86400000).toISOString();
-    const user: UserData = { username, subPath, createdAt: now.toISOString(), expiresAt, note: note || '', active: true, vlessUUID, trojanPassword, maxConnections };
+    const normalizedQuotaGb = Math.round(quotaGb * 100) / 100;
+    const quotaBytes = normalizedQuotaGb === 0 ? 0 : Math.floor(normalizedQuotaGb * 1024 * 1024 * 1024);
+    const user: UserData = { username, subPath, createdAt: now.toISOString(), expiresAt, note: note || '', active: true, vlessUUID, trojanPassword, maxConnections, quotaGb: normalizedQuotaGb, quotaBytes };
 
     await env.kv.put(`user:${username}`, JSON.stringify(user));
     await env.kv.put(`user:vless:${vlessUUID}`, username);
@@ -52,7 +57,7 @@ export async function listUsers(env: Env): Promise<UserData[]> {
     return users.filter((u): u is UserData => u !== null);
 }
 
-export async function updateUser(username: string, updates: Partial<{ days: number; note: string; active: boolean; maxConnections: number }>, env: Env): Promise<{ success: boolean; message: string; user?: UserData }> {
+export async function updateUser(username: string, updates: Partial<{ days: number; note: string; active: boolean; maxConnections: number; quotaGb: number }>, env: Env): Promise<{ success: boolean; message: string; user?: UserData }> {
     const user = await getUser(username, env);
     if (!user) return { success: false, message: 'User not found.' };
     if (updates.days !== undefined) {
@@ -66,6 +71,11 @@ export async function updateUser(username: string, updates: Partial<{ days: numb
     if (updates.maxConnections !== undefined) {
         if (!Number.isInteger(updates.maxConnections) || updates.maxConnections < 1 || updates.maxConnections > 5) return { success: false, message: 'Connection limit must be between 1 and 5.' };
         user.maxConnections = updates.maxConnections;
+    }
+    if (updates.quotaGb !== undefined) {
+        if (!Number.isFinite(updates.quotaGb) || updates.quotaGb < 0 || updates.quotaGb > 100000) return { success: false, message: 'Traffic quota must be between 0 and 100000 GB. Use 0 for unlimited.' };
+        user.quotaGb = Math.round(updates.quotaGb * 100) / 100;
+        user.quotaBytes = user.quotaGb === 0 ? 0 : Math.floor(user.quotaGb * 1024 * 1024 * 1024);
     }
     await env.kv.put(`user:${username}`, JSON.stringify(user));
     return { success: true, message: 'User updated.', user };
@@ -87,21 +97,31 @@ export async function deleteUser(username: string, env: Env): Promise<{ success:
 
 export async function findUserBySubPath(subPath: string, env: Env): Promise<UserData | null> {
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
-    for (const username of index) { const user = await getUser(username, env); if (user && user.subPath === subPath) return user; }
+    for (const username of index) { const user = await getUser(username, env); if (user && user.subPath === subPath) return normalizeUser(user); }
     return null;
 }
-export async function findUserByVlessUUID(uuid: string, env: Env): Promise<UserData | null> { const username = await env.kv.get(`user:vless:${uuid}`); return username ? getUser(username, env) : null; }
+export async function findUserByVlessUUID(uuid: string, env: Env): Promise<UserData | null> { const username = await env.kv.get(`user:vless:${uuid}`); const user = username ? await getUser(username, env) : null; return user ? normalizeUser(user) : null; }
 export async function findUserByTrojanPassword(passwordHash: string, env: Env): Promise<UserData | null> {
     const username = await env.kv.get(`user:trojan-hash:${passwordHash}`);
-    if (username) return getUser(username, env);
+    if (username) { const user = await getUser(username, env); return user ? normalizeUser(user) : null; }
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
     for (const name of index) {
         const user = await getUser(name, env);
         if (user && sha224(user.trojanPassword) === passwordHash) {
             await env.kv.put(`user:trojan-hash:${passwordHash}`, name);
-            return user;
+            return normalizeUser(user);
         }
     }
     return null;
 }
+
+function normalizeUser(user: UserData): UserData {
+    const legacy = user as UserData & { quotaGb?: number; quotaBytes?: number };
+    if (typeof legacy.quotaGb !== 'number') legacy.quotaGb = 0;
+    if (typeof legacy.quotaBytes !== 'number') legacy.quotaBytes = legacy.quotaGb === 0 ? 0 : Math.floor(legacy.quotaGb * 1024 * 1024 * 1024);
+    if (!Number.isInteger(legacy.maxConnections) || legacy.maxConnections < 1) legacy.maxConnections = 1;
+    if (legacy.maxConnections > 5) legacy.maxConnections = 5;
+    return legacy;
+}
+
 export function getStatus(user: UserData): 'active' | 'expired' | 'disabled' { if (!user.active) return 'disabled'; if (new Date(user.expiresAt) < new Date()) return 'expired'; return 'active'; }
