@@ -1,5 +1,6 @@
 import { findUserByTrojanPassword, getStatus } from '@users';
 import { sha224 } from '@commercial/sha224';
+import { UserUsageGuard, byteLength } from '@commercial/usage-guard';
 import {
     handleTCPOutBound,
     makeReadableWebSocketStream,
@@ -13,6 +14,7 @@ export async function TrOverWSHandler(request: Request, env: Env): Promise<Respo
     webSocket.binaryType = 'arraybuffer';
     let address = "";
     let portWithRandomLog = "";
+    let usageGuard: UserUsageGuard | null = null;
     const log = (info: string, event?: string) => console.log(`[${address}:${portWithRandomLog}] ${info}`, event || "");
     const earlyDataHeader = request.headers.get("sec-websocket-protocol") || "";
     const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
@@ -20,23 +22,34 @@ export async function TrOverWSHandler(request: Request, env: Env): Promise<Respo
     let udpStreamWrite: any = null;
     const writableStream = new WritableStream({
         async write(chunk, _controller) {
+            if (usageGuard) usageGuard.track(byteLength(chunk));
             if (udpStreamWrite) return udpStreamWrite(chunk);
             if (remoteSocketWapper.value) {
                 const writer = remoteSocketWapper.value.writable.getWriter();
                 await writer.write(chunk); writer.releaseLock(); return;
             }
-            const { hasError, message, portRemote = 443, addressRemote = "", rawClientData } = await parseTrHeader(chunk, env);
+            const { hasError, message, portRemote = 443, addressRemote = "", rawClientData, user } = await parseTrHeader(chunk, env);
             address = addressRemote;
             portWithRandomLog = `${portRemote}--${Math.random()} tcp`;
             if (hasError) throw new Error(message);
+            if (user) {
+                usageGuard = new UserUsageGuard(user, env, webSocket);
+                await usageGuard.start();
+                const originalSend = webSocket.send.bind(webSocket);
+                webSocket.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+                    usageGuard?.track(byteLength(data));
+                    originalSend(data);
+                };
+            }
             await handleTCPOutBound(remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, null, log);
         },
-        close() { safeCloseTcpSocket(remoteSocketWapper.value); },
-        abort(reason) { log(`readableWebSocketStream is aborted`, JSON.stringify(reason)); }
+        async close() { safeCloseTcpSocket(remoteSocketWapper.value); if (usageGuard) await usageGuard.close(); },
+        abort(reason) { log(`readableWebSocketStream is aborted`, JSON.stringify(reason)); void usageGuard?.close(); }
     });
     readableWebSocketStream.pipeTo(writableStream).catch(error => {
         log("readableWebSocketStream pipeTo error", error);
         safeCloseTcpSocket(remoteSocketWapper.value);
+        void usageGuard?.close();
     });
     return new Response(null, { status: 101, webSocket: client });
 }
@@ -88,5 +101,5 @@ async function parseTrHeader(buffer: ArrayBuffer, env: Env) {
     const portIndex = addressIndex + addressLength;
     const portBuffer = socks5DataBuffer.slice(portIndex, portIndex + 2);
     const portRemote = new DataView(portBuffer).getUint16(0);
-    return { hasError: false, addressRemote: address, portRemote, rawClientData: socks5DataBuffer.slice(portIndex + 4) };
+    return { hasError: false, addressRemote: address, portRemote, rawClientData: socks5DataBuffer.slice(portIndex + 4), user };
 }
