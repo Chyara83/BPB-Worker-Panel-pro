@@ -11,9 +11,9 @@ export class UserUsageDO extends DurableObject<Env> {
     private initialized = false;
 
     private load(): UsageState {
-        const row = this.ctx.storage.sql.exec<UsageState>(
+        const row = this.ctx.storage.sql.exec(
             'SELECT quota_bytes as quotaBytes, used_bytes as usedBytes, active_sessions as activeSessions, max_connections as maxConnections FROM usage WHERE id = 1'
-        ).toArray()[0];
+        ).toArray()[0] as unknown as UsageState | undefined;
         if (row) return row;
         const state: UsageState = { quotaBytes: 0, usedBytes: 0, activeSessions: 0, maxConnections: 1 };
         this.ctx.storage.sql.exec(
@@ -37,21 +37,13 @@ export class UserUsageDO extends DurableObject<Env> {
 
     async initialize(quotaBytes: number, maxConnections: number): Promise<void> {
         this.ensureSchema();
-        const current = this.load();
+        this.load();
         const quota = Math.max(0, Math.floor(quotaBytes));
         const max = Math.min(5, Math.max(1, Math.floor(maxConnections)));
-        this.ctx.storage.sql.exec(
-            'UPDATE usage SET quota_bytes = ?, max_connections = ? WHERE id = 1',
-            quota, max
-        );
-        if (current.usedBytes > quota && quota > 0) {
-            // A reduced quota takes effect immediately; existing usage is retained.
-            this.ctx.storage.sql.exec('UPDATE usage SET used_bytes = MIN(used_bytes, quota_bytes) WHERE id = 1');
-        }
+        this.ctx.storage.sql.exec('UPDATE usage SET quota_bytes = ?, max_connections = ? WHERE id = 1', quota, max);
     }
 
     async acquire(quotaBytes: number, maxConnections: number): Promise<{ ok: boolean; reason: 'ok' | 'quota' | 'limit'; usedBytes: number; quotaBytes: number; activeSessions: number }> {
-        this.ensureSchema();
         await this.initialize(quotaBytes, maxConnections);
         const state = this.load();
         if (state.quotaBytes > 0 && state.usedBytes >= state.quotaBytes) return { ok: false, reason: 'quota', ...state };
