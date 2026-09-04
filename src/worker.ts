@@ -3,6 +3,7 @@ import { fallback, serveIcon, renderSecrets, handlePanel, handleSubscriptions, h
 import { handleCommercialWebsocket } from '@common/commercial-websocket';
 import { handleCommercialUserSub } from '@common/commercial-subscription';
 import { handleCommercialUsers } from '@common/commercial-users';
+import { enhanceCommercialPanel } from '@common/commercial-panel';
 import { handleTelegramWebhook } from '@telegram';
 export { UserUsageDO } from '@commercial/user-usage-do';
 
@@ -21,7 +22,7 @@ export default {
 			initHttp(request, env);
 			if (pathName === '/panel/users' || pathName.startsWith('/panel/users/')) return await handleCommercialUsers(request, env);
 			switch (path) {
-				case 'panel': return await handlePanel(request, env);
+				case 'panel': return enhanceCommercialPanel(await handlePanel(request, env));
 				case 'sub':
 					if (pathName.startsWith('/sub/user/')) return await handleCommercialUserSub(request, env);
 					return await handleSubscriptions(request, env);
