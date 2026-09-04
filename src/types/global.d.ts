@@ -2,7 +2,7 @@ declare global {
     interface GlobalConfig { readonly userID: string; readonly TrPass: string; readonly pathName: string; readonly fallbackDomain: string; readonly dohURL: string; }
     interface HttpConfig { readonly panelVersion: string; readonly defaultHttpPorts: number[]; readonly defaultHttpsPorts: number[]; readonly hostName: string; readonly client: string; readonly urlOrigin: string; readonly subPath: string; }
     interface WsConfig { readonly defaultProxyIPs: string[]; readonly defaultPrefixes: string[]; readonly envProxyIPs: string; readonly envPrefixes: string; wsProtocol?: "vl" | "tr"; proxyMode?: "proxyip" | "prefix"; panelIPs?: string[]; }
-    interface Env { readonly UUID: string; readonly TR_PASS: string; readonly PROXY_IP: string; readonly PREFIX: string; readonly FALLBACK: string; readonly DOH_URL: string; readonly SUB_PATH: string; readonly kv: KVNamespace; }
+    interface Env { readonly UUID: string; readonly TR_PASS: string; readonly PROXY_IP: string; readonly PREFIX: string; readonly FALLBACK: string; readonly DOH_URL: string; readonly SUB_PATH: string; readonly kv: KVNamespace; readonly DB: D1Database; }
     interface WarpAccount { privateKey: string; publicKey: string; warpIPv6: string; reserved: string; }
     interface DnsHost { host: string; isDomain: boolean; ipv4: string[]; ipv6: string[]; }
     interface UpstreamProxy { upstreamServer?: string; upstreamPort?: number; }
@@ -13,7 +13,7 @@ declare global {
     }
     var settings: Settings; var globalConfig: GlobalConfig; var httpConfig: HttpConfig; var wsConfig: WsConfig;
     var dict: { readonly _VL_: string; readonly _VL_CAP_: string; readonly _VM_: string; readonly _TR_: string; readonly _TR_CAP_: string; readonly _SS_: string; readonly _V2_: string; readonly _project_: string; readonly _website_: string; readonly _public_proxy_ip_: string; };
-    interface GeoAsset { rule: boolean; type: string; geosite: string; geoip?: string; geositeURL?: string; geoipURL?: string; dns?: string; format?: string; }
+    interface GeoAsset { rule: boolean; type: string; geosite: string; ipv4?: string; geositeURL?: string; geoipURL?: string; dns?: string; format?: string; }
     const __VERSION__: string; const __ERROR_HTML_CONTENT__: string; const __ICON__: string; const __PANEL_HTML_CONTENT__: string; const __LOGIN_HTML_CONTENT__: string; const __SECRETS_HTML_CONTENT__: string; const __PROXY_IP_HTML_CONTENT__: string;
     interface Array<T> { concatIf<T>(condition: boolean, concat: T | T[]): T[]; }
     interface Object { omitEmpty<T>(): T | undefined; timestamp?: number; }
