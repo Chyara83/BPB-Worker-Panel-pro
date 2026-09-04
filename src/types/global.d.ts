@@ -1,5 +1,5 @@
 declare global {
-    interface GlobalConfig { readonly userID: string; readonly TrPass: string; readonly pathName: string; readonly fallbackDomain: string; readonly dohURL: string; readonly runtimeEnv?: Env; }
+    interface GlobalConfig { readonly userID: string; readonly TrPass: string; readonly pathName: string; readonly fallbackDomain: string; readonly dohURL: string; }
     interface HttpConfig { readonly panelVersion: string; readonly defaultHttpPorts: number[]; readonly defaultHttpsPorts: number[]; readonly hostName: string; readonly client: string; readonly urlOrigin: string; readonly subPath: string; }
     interface WsConfig { readonly defaultProxyIPs: string[]; readonly defaultPrefixes: string[]; readonly envProxyIPs: string; readonly envPrefixes: string; wsProtocol?: "vl" | "tr"; proxyMode?: "proxyip" | "prefix"; panelIPs?: string[]; }
     interface Env { readonly UUID: string; readonly TR_PASS: string; readonly PROXY_IP: string; readonly PREFIX: string; readonly FALLBACK: string; readonly DOH_URL: string; readonly SUB_PATH: string; readonly kv: KVNamespace; }
