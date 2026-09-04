@@ -2,20 +2,36 @@ import { getDataset } from "@kv";
 import { isValidUUID } from "@common";
 
 globalThis.dict = {
-    _VL_: atob('dmxlc3M='), _VL_CAP_: atob('VkxFU1M='), _VM_: atob('dm1lc3M='), _TR_: atob('dHJvamFu'), _TR_CAP_: atob('VHJvamFu'), _SS_: atob('c2hhZG93c29ja3M='), _V2_: atob('djJyYXk='), _project_: atob('QlBC'), _website_: atob('aHR0cHM6Ly9iaWEtcGFpbi1iYWNrZS5naXRodWIuaW8vQlBCLVdvcmtlci1QYW5lbC8='), _public_proxy_ip_: atob('YnBiLnlvdXNlZi5pc2VnYXJvLmNvbQ==')
+    _VL_: atob('dmxlc3M='),
+    _VL_CAP_: atob('VkxFU1M='),
+    _VM_: atob('dm1lc3M='),
+    _TR_: atob('dHJvamFu'),
+    _TR_CAP_: atob('VHJvamFu'),
+    _SS_: atob('c2hhZG93c29ja3M='),
+    _V2_: atob('djJyYXk='),
+    _project_: atob('QlBCA=='),
+    _website_: atob('aHR0cHM6Ly9iaWEtcGFpbi1iYWNrZS5naXRodWIuaW8vQlBCLVdvcmtlci1QYW5lbC8='),
+    _public_proxy_ip_: atob('YnBiLnlvdXNlZi5pc2VnYXJvLmNvbQ==')
 };
 
 globalThis.settings = {
-    localDNS: "8.8.8.8", antiSanctionDNS: "178.22.122.100", fakeDNS: false, enableIPv6: true, allowLANConnection: false, logLevel: "warning", remoteDNS: "https://8.8.8.8/dns-query",
-    remoteDnsHost: { host: "8.8.8.8", isDomain: false, ipv4: [], ipv6: [] }, proxyIPMode: "proxyip", proxyIPs: [], prefixes: [], upstreamProxy: "", upstreamParams: { upstreamServer: undefined, upstreamPort: undefined }, outProxy: "", outProxyParams: {}, cleanIPs: [], customCdnAddrs: [], customCdnHost: "", customCdnSni: "", bestVLTRInterval: 30, VLConfigs: true, TRConfigs: true, ports: [443], fingerprint: "chrome", enableTFO: false, fragmentMode: "custom", fragmentLengthMin: 100, fragmentLengthMax: 200, fragmentIntervalMin: 1, fragmentIntervalMax: 1, fragmentMaxSplitMin: undefined, fragmentMaxSplitMax: undefined, fragmentPackets: "tlshello", enableECH: false, echServerName: "", bypassIran: false, bypassChina: false, bypassRussia: false, bypassOpenAi: false, bypassGoogleAi: false, bypassMicrosoft: false, bypassOracle: false, bypassDocker: false, bypassAdobe: false, bypassEpicGames: false, bypassIntel: false, bypassAmd: false, bypassNvidia: false, bypassAsus: false, bypassHp: false, bypassLenovo: false, blockAds: false, blockPorn: false, blockUDP443: false, blockMalware: false, blockPhishing: false, blockCryptominers: false, customBypassRules: [], customBlockRules: [], customBypassSanctionRules: [], warpRemoteDNS: "1.1.1.1", warpEndpoints: ["engage.cloudflareclient.com:2408"], bestWarpInterval: 30,
-    xrayUdpNoises: [{ type: "rand", packet: "50-100", delay: "1-1", count: 5 }], knockerNoiseMode: "quic", noiseCountMin: 10, noiseCountMax: 15, noiseSizeMin: 5, noiseSizeMax: 10, noiseDelayMin: 1, noiseDelayMax: 1, amneziaNoiseCount: 5, amneziaNoiseSizeMin: 50, amneziaNoiseSizeMax: 100, telegramBotToken: "", telegramAdminId: "", customSubs: [], customConfigs: [], panelVersion: __VERSION__
+    localDNS: "8.8.8.8",
+    antiSanctionDNS: "178.22.122.100",
+    fakeDNS: false,
+    enableIPv6: true,
+    allowLANConnection: false,
+    logLevel: "warning",
+    remoteDNS: "https://8.8.8.8/dns-query",
+    remoteDnsHost: { host: "8.8.8.8", isDomain: false, ipv4: [], ipv6: [] },
+    proxyIPMode: "proxyip", proxyIPs: [], prefixes: [], upstreamProxy: "",
+    upstreamParams: { upstreamServer: undefined, upstreamPort: undefined }, outProxy: "", outProxyParams: {}, cleanIPs: [], customCdnAddrs: [], customCdnHost: "", customCdnSni: "", bestVLTRInterval: 30, VLConfigs: true, TRConfigs: true, ports: [443], fingerprint: "chrome", enableTFO: false, fragmentMode: "custom", fragmentLengthMin: 100, fragmentLengthMax: 200, fragmentIntervalMin: 1, fragmentIntervalMax: 1, fragmentMaxSplitMin: undefined, fragmentMaxSplitMax: undefined, fragmentPackets: "tlshello", enableECH: false, echServerName: "", bypassIran: false, bypassChina: false, bypassRussia: false, bypassOpenAi: false, bypassGoogleAi: false, bypassMicrosoft: false, bypassOracle: false, bypassDocker: false, bypassAdobe: false, bypassEpicGames: false, bypassIntel: false, bypassAmd: false, bypassNvidia: false, bypassAsus: false, bypassHp: false, bypassLenovo: false, blockAds: false, blockPorn: false, blockUDP443: false, blockMalware: false, blockPhishing: false, blockCryptominers: false, customBypassRules: [], customBlockRules: [], customBypassSanctionRules: [], warpRemoteDNS: "1.1.1.1", warpEndpoints: ["engage.cloudflareclient.com:2408"], bestWarpInterval: 30, xrayUdpNoises: [{ type: "rand", packet: "50-100", delay: "1-1", count: 5 }], knockerNoiseMode: "quic", noiseCountMin: 10, noiseCountMax: 15, noiseSizeMin: 5, noiseSizeMax: 10, noiseDelayMin: 1, noiseDelayMax: 1, amneziaNoiseCount: 5, amneziaNoiseSizeMin: 50, amneziaNoiseSizeMax: 100, telegramBotToken: "", telegramAdminId: "", customSubs: [], customConfigs: [], panelVersion: __VERSION__
 };
 
 export async function setSettings(request: Request, env: Env) { const dataset = await getDataset(request, env); globalThis.settings = dataset.settings; }
 
 export function init(request: Request, env: Env) {
     const { pathname } = new URL(request.url); const { UUID, TR_PASS, FALLBACK, DOH_URL } = env;
-    globalThis.globalConfig = { userID: UUID, TrPass: TR_PASS, pathName: decodeURIComponent(pathname), fallbackDomain: FALLBACK || 'www.hcaptcha.com', dohURL: DOH_URL || 'https://cloudflare-dns.com/dns-query', runtimeEnv: env };
+    globalThis.globalConfig = { userID: UUID, TrPass: TR_PASS, pathName: decodeURIComponent(pathname), fallbackDomain: FALLBACK || 'www.hcaptcha.com', dohURL: DOH_URL || 'https://cloudflare-dns.com/dns-query' };
 }
 
 export function initWs(env: any) {
