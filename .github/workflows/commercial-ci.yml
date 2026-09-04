@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - commercial-v1-auth-v3
+      - commercial-v1-auth-v4
   workflow_dispatch:
 
 jobs:
