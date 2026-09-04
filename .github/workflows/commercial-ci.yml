@@ -1,0 +1,20 @@
+name: Commercial CI
+
+on:
+  push:
+    branches:
+      - commercial-v1-auth-v3
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install
+      - run: npm run check
+      - run: npm run build
