@@ -48,13 +48,10 @@ export async function TrOverWSHandler(request: Request, env: Env): Promise<Respo
 }
 
 async function parseTrHeader(buffer: ArrayBuffer, env: Env) {
-    const CRLF_INDEX = 56;
-    if (buffer.byteLength < CRLF_INDEX + 2) return { hasError: true, message: "invalid data" };
-    const crLfIndex = CRLF_INDEX;
-    const cr = new Uint8Array(buffer.slice(crLfIndex, crLfIndex + 1))[0];
-    const lf = new Uint8Array(buffer.slice(crLfIndex + 1, crLfIndex + 2))[0];
-    if (cr !== 0x0d || lf !== 0x0a) return { hasError: true, message: "invalid header format (missing CR LF)" };
-    const password = new TextDecoder().decode(buffer.slice(0, crLfIndex));
+    const bytes = new Uint8Array(buffer);
+    const crLfIndex = findPasswordTerminator(bytes);
+    if (crLfIndex < 1) return { hasError: true, message: "invalid data" };
+    const password = new TextDecoder().decode(bytes.slice(0, crLfIndex));
     const user = await findUserByTrojanPassword(password, env);
     if (user) {
         if (getStatus(user) !== 'active') return { hasError: true, message: `user ${getStatus(user)}` };
@@ -81,4 +78,10 @@ async function parseTrHeader(buffer: ArrayBuffer, env: Env) {
     const portIndex = addressIndex + addressLength;
     const portRemote = new DataView(socks5DataBuffer.slice(portIndex, portIndex + 2)).getUint16(0);
     return { hasError: false, addressRemote: address, portRemote, rawClientData: socks5DataBuffer.slice(portIndex + 4), user };
+}
+
+function findPasswordTerminator(bytes: Uint8Array): number {
+    const max = Math.min(bytes.length - 2, 64);
+    for (let i = 1; i <= max; i++) if (bytes[i] === 0x0d && bytes[i + 1] === 0x0a) return i;
+    return -1;
 }
