@@ -4,7 +4,7 @@ import { handleCommercialWebsocket } from '@common/commercial-websocket';
 import { handleCommercialUserSub } from '@common/commercial-subscription';
 import { handleCommercialUsers } from '@common/commercial-users';
 import { checkAllExternalConfigs, handleCommercialExternalConfigs, handleExternalConfigSubscription } from '@common/commercial-external-configs';
-import { enhanceCommercialPanel } from '@common/commercial-panel';
+import { enhanceCommercialPanel } from '@common/commercial-panel-v2';
 import { handleTelegramWebhook } from '@telegram';
 export { UserUsageDO } from '@commercial/user-usage-do';
 
