@@ -52,7 +52,7 @@ async function parseTrHeader(buffer: ArrayBuffer, env: Env) {
     const crLfIndex = findPasswordTerminator(bytes);
     if (crLfIndex < 1) return { hasError: true, message: "invalid data" };
     const password = new TextDecoder().decode(bytes.slice(0, crLfIndex));
-    const user = await findUserByTrojanPassword(password, env);
+    const user = await findUserByTrojanPassword(sha224(password), env);
     if (user) {
         if (getStatus(user) !== 'active') return { hasError: true, message: `user ${getStatus(user)}` };
     } else {
