@@ -4,6 +4,19 @@
   "main": "dist/worker.js",
   "compatibility_date": "2026-09-03",
   "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
   "kv_namespaces": [
     { "binding": "kv", "id": "f852c8f6a5854b36a3799846fba0464f" }
   ],
