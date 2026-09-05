@@ -3,6 +3,12 @@
   "name": "bpb-worker-panel-pro",
   "main": "dist/worker.js",
   "compatibility_date": "2026-09-03",
+  "kv_namespaces": [
+    {
+      "binding": "kv",
+      "id": "f852c8f6a5854b36a3799846fba0464f"
+    }
+  ],
   "triggers": { "crons": ["*/5 * * * *"] },
   "durable_objects": { "bindings": [{ "name": "USER_USAGE", "class_name": "UserUsageDO" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserUsageDO"] }]
