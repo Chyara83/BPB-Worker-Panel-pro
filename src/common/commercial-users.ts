@@ -28,7 +28,8 @@ export async function handleCommercialUsers(request: Request, env: Env): Promise
         if (request.method === 'GET') return respond(true, HttpStatus.OK, '', decorate(user, await getUserUsage(user, env)));
         if (request.method === 'PUT') {
             const body = await request.json<{ days?: number; note?: string; active?: boolean; maxConnections?: number; quotaGb?: number; resetUsage?: boolean }>();
-            const result = await updateUser(username, { days: body.days, note: body.note, active: body.active, maxConnections: body.maxConnections, quotaGb: body.quotaGb }, env);
+            const updates = { days: body.days === 0 ? undefined : body.days, note: body.note, active: body.active, maxConnections: body.maxConnections, quotaGb: body.quotaGb };
+            const result = await updateUser(username, updates, env);
             if (!result.success || !result.user) return respond(false, HttpStatus.NOT_FOUND, result.message);
             if (body.resetUsage) await resetUserUsage(result.user, env);
             return respond(true, HttpStatus.OK, result.message, decorate(result.user, await getUserUsage(result.user, env)));
