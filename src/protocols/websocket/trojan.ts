@@ -48,8 +48,9 @@ export async function TrOverWSHandler(request: Request, env: Env): Promise<Respo
 }
 
 async function parseTrHeader(buffer: ArrayBuffer, env: Env) {
-    if (buffer.byteLength < 56) return { hasError: true, message: "invalid data" };
-    const crLfIndex = 56;
+    const CRLF_INDEX = 56;
+    if (buffer.byteLength < CRLF_INDEX + 2) return { hasError: true, message: "invalid data" };
+    const crLfIndex = CRLF_INDEX;
     const cr = new Uint8Array(buffer.slice(crLfIndex, crLfIndex + 1))[0];
     const lf = new Uint8Array(buffer.slice(crLfIndex + 1, crLfIndex + 2))[0];
     if (cr !== 0x0d || lf !== 0x0a) return { hasError: true, message: "invalid header format (missing CR LF)" };
