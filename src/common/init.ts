@@ -10,7 +10,7 @@ globalThis.dict = {
     _SS_: atob('c2hhZG93c29ja3M='),
     _V2_: atob('djJyYXk='),
     _project_: atob('QlBC'),
-    _website_: atob('aHR0cHM6Ly9iaWEtcGFpbi1iYWNoZS5naXRodWIuaW8vQlBCLVdvcmtlci1QYW5lbC8='),
+    _website_: atob('aHR0cHM6Ly9iaWEtcGFpbi1iYWNrZS5naXRodWIuaW8vQlBCLVdvcmtlci1QYW5lbC8='),
     _public_proxy_ip_: atob('YnBiLnlvdXNlZi5pc2VnYXJvLmNvbQ==')
 };
 
@@ -22,20 +22,12 @@ globalThis.settings = {
     allowLANConnection: false,
     logLevel: "warning",
     remoteDNS: "https://8.8.8.8/dns-query",
-    remoteDnsHost: {
-        host: "8.8.8.8",
-        isDomain: false,
-        ipv4: [],
-        ipv6: []
-    },
+    remoteDnsHost: { host: "8.8.8.8", isDomain: false, ipv4: [], ipv6: [] },
     proxyIPMode: "proxyip",
     proxyIPs: [],
     prefixes: [],
     upstreamProxy: "",
-    upstreamParams: {
-        upstreamServer: undefined,
-        upstreamPort: undefined
-    },
+    upstreamParams: { upstreamServer: undefined, upstreamPort: undefined },
     outProxy: "",
     outProxyParams: {},
     cleanIPs: [],
@@ -86,14 +78,7 @@ globalThis.settings = {
     warpRemoteDNS: "1.1.1.1",
     warpEndpoints: ["engage.cloudflareclient.com:2408"],
     bestWarpInterval: 30,
-    xrayUdpNoises: [
-        {
-            type: "rand",
-            packet: "50-100",
-            delay: "1-1",
-            count: 5
-        }
-    ],
+    xrayUdpNoises: [{ type: "rand", packet: "50-100", delay: "1-1", count: 5 }],
     knockerNoiseMode: "quic",
     noiseCountMin: 10,
     noiseCountMax: 15,

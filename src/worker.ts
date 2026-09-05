@@ -1,73 +1,31 @@
 import { init, initHttp, initWs } from '@init';
-import {
-	fallback,
-	serveIcon,
-	renderSecrets,
-	handlePanel,
-	handleSubscriptions,
-	handleLogin,
-	logout,
-	renderError,
-	handleWebsocket,
-	handleDoH,
-	handleProxyIPs,
-	handleUserSub
-} from '@handlers';
+import { fallback, serveIcon, renderSecrets, handlePanel, handleSubscriptions, handleLogin, logout, renderError, handleDoH, handleProxyIPs } from '@handlers';
+import { handleCommercialWebsocket } from '@common/commercial-websocket';
+import { handleCommercialUserSub } from '@common/commercial-subscription';
+import { handleCommercialUsers } from '@common/commercial-users';
+import { checkAllExternalConfigs, handleCommercialExternalConfigs, handleExternalConfigSubscription } from '@common/commercial-external-configs';
+import { enhanceCommercialPanel } from '@common/commercial-panel';
 import { handleTelegramWebhook } from '@telegram';
+export { UserUsageDO } from '@commercial/user-usage-do';
 
 export default {
-	async fetch(request: Request, env: Env) {
-		try {
-			const upgradeHeader = request.headers.get('Upgrade');
-			init(request, env);
-
-			if (upgradeHeader === 'websocket') {
-				initWs(env);
-				return await handleWebsocket(request);
-			} else {
-				const { pathName } = globalThis.globalConfig;
-				const path = pathName.split('/')[1];
-
-				if (path === 'telegram') {
-					return await handleTelegramWebhook(request, env);
-				}
-
-				initHttp(request, env);
-
-				switch (path) {
-				case 'panel':
-					return await handlePanel(request, env);
-
-					case 'sub':
-						if (pathName.startsWith('/sub/user/')) {
-							return await handleUserSub(request, env);
-						}
-						return await handleSubscriptions(request, env);
-
-					case 'login':
-						return await handleLogin(request, env);
-
-					case 'logout':
-						return logout();
-
-					case 'secrets':
-						return await renderSecrets();
-
-					case 'favicon.ico':
-						return await serveIcon();
-
-					case 'dns-query':
-						return await handleDoH(request);
-
-					case 'proxy-ip':
-						return await handleProxyIPs(request, env);
-
-					default:
-						return await fallback(request);
-				}
-			}
-		} catch (error) {
-			return await renderError(error);
-		}
-	}
-}
+    async fetch(request: Request, env: Env) {
+        try {
+            const upgradeHeader = request.headers.get('Upgrade');
+            init(request, env);
+            if (upgradeHeader === 'websocket') { initWs(env); return await handleCommercialWebsocket(request, env); }
+            const pathName = new URL(request.url).pathname, path = pathName.split('/')[1];
+            if (path === 'telegram') return await handleTelegramWebhook(request, env);
+            initHttp(request, env);
+            if (pathName === '/panel/users' || pathName.startsWith('/panel/users/')) return await handleCommercialUsers(request, env);
+            if (pathName === '/panel/external-configs' || pathName.startsWith('/panel/external-configs/')) return await handleCommercialExternalConfigs(request, env);
+            if (pathName.startsWith('/sub/external/')) return await handleExternalConfigSubscription(request, env);
+            switch (path) {
+                case 'panel': return enhanceCommercialPanel(await handlePanel(request, env));
+                case 'sub': if (pathName.startsWith('/sub/user/')) return await handleCommercialUserSub(request, env); return await handleSubscriptions(request, env);
+                case 'login': return await handleLogin(request, env); case 'logout': return logout(); case 'secrets': return await renderSecrets(); case 'favicon.ico': return await serveIcon(); case 'dns-query': return await handleDoH(request); case 'proxy-ip': return await handleProxyIPs(request, env); default: return await fallback(request);
+            }
+        } catch (error) { return await renderError(error); }
+    },
+    async scheduled(_event: ScheduledEvent, env: Env) { await checkAllExternalConfigs(env); }
+};

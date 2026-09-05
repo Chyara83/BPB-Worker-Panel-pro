@@ -2,5 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "bpb-worker-panel-pro",
   "main": "dist/worker.js",
-  "compatibility_date": "2026-09-03"
+  "compatibility_date": "2026-09-03",
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "durable_objects": { "bindings": [{ "name": "USER_USAGE", "class_name": "UserUsageDO" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserUsageDO"] }]
 }
