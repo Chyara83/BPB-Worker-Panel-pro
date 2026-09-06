@@ -23,7 +23,7 @@ export default {
             switch (path) {
                 case 'panel': return enhanceCommercialPanel(await handlePanel(request, env));
                 case 'sub': if (pathName.startsWith('/sub/user/')) return await handleCommercialUserSub(request, env); return await handleSubscriptions(request, env);
-                case 'login': return await handleLogin(request, env); case 'logout': return logout(); case 'secrets': return await renderSecrets(); case 'favicon.ico': return await serveIcon(); case 'dns-query': return await handleDoH(request, env); case 'proxy-ip': return await handleProxyIPs(request, env); default: return await fallback(request);
+                case 'login': return await handleLogin(request, env); case 'logout': return logout(); case 'secrets': return await renderSecrets(); case 'favicon.ico': return await serveIcon(); case 'dns-query': return await handleDoH(request); case 'proxy-ip': return await handleProxyIPs(request, env); default: return await fallback(request);
             }
         } catch (error) { return await renderError(error); }
     },
