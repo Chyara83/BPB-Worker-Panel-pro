@@ -41,7 +41,8 @@ function ensureUserControls(){
             '<div class="form-group" id="commercial-edit-options">' +
             '<label class="form-label">Traffic Quota (GB)</label><input class="neon-input" type="number" id="editUserQuota" min="0" step="0.01" title="0 = unlimited">' +
             '<label class="form-label" style="margin-top:12px;">Devices</label><select class="neon-input" id="editUserConnections"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>' +
-            '<label class="toggle-label"><input type="checkbox" id="editUserResetUsage"><span class="toggle-switch"></span> Reset traffic usage</label>');
+            '<label class="toggle-label"><input type="checkbox" id="editUserResetUsage"><span class="toggle-switch"></span> Reset traffic usage</label>' +
+            '<label class="toggle-label"><input type="checkbox" id="editUserResetState"><span class="toggle-switch"></span> Reset active sessions</label>');
     }
     const table = tab.querySelector('table');
     const head = table && table.querySelector('thead tr');
@@ -90,12 +91,12 @@ function installActions(){
     };
     window.openUserEdit = async function(username){
         window.editingUsername=username;
-        try{const r=await fetch('/panel/users/'+encodeURIComponent(username),{credentials:'include',cache:'no-store'});const d=await r.json();if(!d.success){showToast('User not found.','error');return;}const u=d.body;ensureUserControls();$('editUserUsername').textContent=u.username;$('editUserDays').value=0;$('editUserNote').value=u.note||'';$('editUserActive').value=u.active?'true':'false';$('editUserQuota').value=u.quotaGb||0;$('editUserConnections').value=u.maxConnections||1;$('editUserResetUsage').checked=false;$('userEditModal').style.display='flex';document.body.style.overflow='hidden';}catch(e){showToast('Failed to load user.','error');}
+        try{const r=await fetch('/panel/users/'+encodeURIComponent(username),{credentials:'include',cache:'no-store'});const d=await r.json();if(!d.success){showToast('User not found.','error');return;}const u=d.body;ensureUserControls();$('editUserUsername').textContent=u.username;$('editUserDays').value=0;$('editUserNote').value=u.note||'';$('editUserActive').value=u.active?'true':'false';$('editUserQuota').value=u.quotaGb||0;$('editUserConnections').value=u.maxConnections||1;$('editUserResetUsage').checked=false;$('editUserResetState').checked=false;$('userEditModal').style.display='flex';document.body.style.overflow='hidden';}catch(e){showToast('Failed to load user.','error');}
     };
     window.saveUserEdit = async function(){
         if(!window.editingUsername)return;
-        const days=parseInt($('editUserDays')?.value||'0',10)||0,note=$('editUserNote')?.value.trim()||'',active=$('editUserActive')?.value==='true',quotaGb=parseFloat($('editUserQuota')?.value||'0')||0,maxConnections=parseInt($('editUserConnections')?.value||'1',10)||1,resetUsage=!!$('editUserResetUsage')?.checked;
-        try{const r=await fetch('/panel/users/'+encodeURIComponent(window.editingUsername),{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({days,note,active,quotaGb,maxConnections,resetUsage})});const d=await r.json();if(!d.success){showToast(d.message||'Failed to update user.','error');return;}showToast('User updated.','success');if(typeof closeUserEdit==='function')closeUserEdit();await loadUsers();}catch(e){showToast('Failed to update user.','error');}
+        const days=parseInt($('editUserDays')?.value||'0',10)||0,note=$('editUserNote')?.value.trim()||'',active=$('editUserActive')?.value==='true',quotaGb=parseFloat($('editUserQuota')?.value||'0')||0,maxConnections=parseInt($('editUserConnections')?.value||'1',10)||1,resetUsage=!!$('editUserResetUsage')?.checked,resetState=!!$('editUserResetState')?.checked;
+        try{const r=await fetch('/panel/users/'+encodeURIComponent(window.editingUsername),{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({days,note,active,quotaGb,maxConnections,resetUsage,resetState})});const d=await r.json();if(!d.success){showToast(d.message||'Failed to update user.','error');return;}showToast('User updated.','success');if(typeof closeUserEdit==='function')closeUserEdit();await loadUsers();}catch(e){showToast('Failed to update user.','error');}
     };
 }
 
