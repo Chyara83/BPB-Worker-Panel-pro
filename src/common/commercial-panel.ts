@@ -1,3 +1,4 @@
+// Commercial panel deployment trigger: active-session reset UI is ready.
 export function enhanceCommercialPanel(response: Response): Response {
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) return response;
