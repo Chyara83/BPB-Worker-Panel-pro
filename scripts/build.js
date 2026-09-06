@@ -29,10 +29,15 @@ async function processHtmlPages() {
         const indexHtml = readFileSync(base('index.html'), 'utf8');
         let finalHtml = indexHtml.replaceAll('__VERSION__', version);
         if (dir !== 'error') {
-            const styleCode = readFileSync(base('style.css'), 'utf8');
             const scriptCode = readFileSync(base('script.js'), 'utf8');
             const finalScriptCode = await jsMinify(scriptCode);
+            const styleCode = readFileSync(base('style.css'), 'utf8');
             finalHtml = finalHtml.replaceAll('__STYLE__', `<style>${styleCode}</style>`).replaceAll('__SCRIPT__', finalScriptCode.code);
+            if (dir === 'panel') {
+                const commercialCode = readFileSync(join(ASSET_PATH, 'panel/commercial.js'), 'utf8');
+                const commercialScript = await jsMinify(commercialCode);
+                finalHtml = finalHtml.replace('</body>', `<script>${commercialScript.code}</script></body>`);
+            }
         }
         const minifiedHtml = htmlMinify(finalHtml, { collapseWhitespace: true, removeAttributeQuotes: true, minifyCSS: true });
         result[dir] = JSON.stringify(gzipSync(minifiedHtml).toString('base64'));
