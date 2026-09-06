@@ -27,11 +27,12 @@ export async function handleCommercialUsers(request: Request, env: Env): Promise
         if (!user) return respond(false, HttpStatus.NOT_FOUND, 'User not found.');
         if (request.method === 'GET') return respond(true, HttpStatus.OK, '', decorate(user, await getUserUsage(user, env)));
         if (request.method === 'PUT') {
-            const body = await request.json<{ days?: number; note?: string; active?: boolean; maxConnections?: number; quotaGb?: number; resetUsage?: boolean }>();
+            const body = await request.json<{ days?: number; note?: string; active?: boolean; maxConnections?: number; quotaGb?: number; resetUsage?: boolean; resetState?: boolean }>();
             const updates = { days: body.days === 0 ? undefined : body.days, note: body.note, active: body.active, maxConnections: body.maxConnections, quotaGb: body.quotaGb };
             const result = await updateUser(username, updates, env);
             if (!result.success || !result.user) return respond(false, HttpStatus.NOT_FOUND, result.message);
-            if (body.resetUsage) await resetUserUsage(result.user, env);
+            if (body.resetState) await resetUserState(result.user, env);
+            else if (body.resetUsage) await resetUserUsage(result.user, env);
             return respond(true, HttpStatus.OK, result.message, decorate(result.user, await getUserUsage(result.user, env)));
         }
         if (request.method === 'DELETE') { const result = await deleteUser(username, env); if (!result.success) return respond(false, HttpStatus.NOT_FOUND, result.message); return respond(true, HttpStatus.OK, result.message); }
