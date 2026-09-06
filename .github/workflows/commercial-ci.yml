@@ -3,6 +3,7 @@ name: Commercial CI
 on:
   push:
     branches:
+      - production-users
       - commercial-v1-auth-v3
       - commercial-v1-auth-v4
   pull_request:
@@ -18,6 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
       - run: npm install
       - run: npm run check
       - run: npm run build
