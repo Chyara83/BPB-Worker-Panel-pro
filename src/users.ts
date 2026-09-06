@@ -64,10 +64,14 @@ export async function updateUser(username: string, updates: Partial<{ days: numb
     const user = await getUser(username, env);
     if (!user) return { success: false, message: 'User not found.' };
     if (updates.days !== undefined) {
-        if (!Number.isFinite(updates.days) || updates.days <= 0 || updates.days > 3650) return { success: false, message: 'Invalid subscription duration.' };
-        const now = Date.now();
-        const currentExp = new Date(user.expiresAt).getTime();
-        user.expiresAt = new Date(Math.max(now, currentExp) + updates.days * 86400000).toISOString();
+        // In the edit form, 0 means "do not extend the current expiry".
+        // Positive values extend the subscription; negative/non-finite values remain invalid.
+        if (!Number.isFinite(updates.days) || updates.days < 0 || updates.days > 3650) return { success: false, message: 'Invalid subscription duration.' };
+        if (updates.days > 0) {
+            const now = Date.now();
+            const currentExp = new Date(user.expiresAt).getTime();
+            user.expiresAt = new Date(Math.max(now, currentExp) + updates.days * 86400000).toISOString();
+        }
     }
     if (updates.note !== undefined) user.note = updates.note;
     if (updates.active !== undefined) user.active = updates.active;
