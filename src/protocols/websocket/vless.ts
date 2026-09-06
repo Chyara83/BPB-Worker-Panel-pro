@@ -11,7 +11,7 @@ import {
 export async function VlOverWSHandler(request: Request, env: Env): Promise<Response> {
     const webSocketPair = new WebSocketPair();
     const [client, webSocket] = Object.values(webSocketPair);
-    webSocket.accept();
+    webSocket.accept({ allowHalfOpen: true });
     webSocket.binaryType = 'arraybuffer';
 
     let address = "";
@@ -25,6 +25,10 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
     let remoteSocketWapper: { value: Socket | null } = { value: null };
     let udpStreamWrite: any = null;
     let isDns = false;
+
+    const releaseUsage = () => { void usageGuard?.close(); };
+    webSocket.addEventListener('close', releaseUsage);
+    webSocket.addEventListener('error', releaseUsage);
 
     const writableStream = new WritableStream({
         async write(chunk) {
