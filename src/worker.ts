@@ -4,8 +4,6 @@ import { handleCommercialWebsocket } from '@common/commercial-websocket';
 import { handleCommercialUserSub } from '@common/commercial-subscription';
 import { handleCommercialUsers } from '@common/commercial-users';
 import { checkAllExternalConfigs, handleCommercialExternalConfigs, handleExternalConfigSubscription } from '@common/commercial-external-configs';
-import { enhanceCommercialPanel } from '@common/commercial-panel';
-import { bootstrapCommercialUI } from '@common/commercial-ui-bootstrap';
 import { handleTelegramWebhook } from '@telegram';
 export { UserUsageDO } from '@commercial/user-usage-do';
 
@@ -23,10 +21,10 @@ export default {
             if (pathName.startsWith('/sub/external/')) return await handleExternalConfigSubscription(request, env);
             switch (path) {
                 case 'panel': {
-                    const response = bootstrapCommercialUI(enhanceCommercialPanel(await handlePanel(request, env)));
+                    const response = await handlePanel(request, env);
                     const headers = new Headers(response.headers);
                     headers.set('Cache-Control', 'no-store, private, max-age=0');
-                    headers.set('X-BPB-Commercial-UI', 'v3');
+                    headers.set('X-BPB-Commercial-UI', 'static-v4');
                     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
                 }
                 case 'sub': if (pathName.startsWith('/sub/user/')) return await handleCommercialUserSub(request, env); return await handleSubscriptions(request, env);
