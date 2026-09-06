@@ -18,20 +18,15 @@ export async function handleTCPOutBound(
         log(`TCP connect attempt ${address}:${port}`);
         const tcpSocket = connect({ hostname: address, port });
         remoteSocket.value = tcpSocket;
+        log(`TCP socket created ${address}:${port}`);
+        const writer = tcpSocket.writable.getWriter();
         try {
-            await tcpSocket.opened;
-            log(`TCP socket opened ${address}:${port}`);
-            const writer = tcpSocket.writable.getWriter();
-            try {
-                if (rawClientData && rawClientData.byteLength > 0) await writer.write(rawClientData);
-            } finally { writer.releaseLock(); }
-            log(`TCP connected ${address}:${port}`);
-            return tcpSocket;
-        } catch (error) {
-            safeCloseTcpSocket(tcpSocket);
-            remoteSocket.value = null;
-            throw error;
+            if (rawClientData && rawClientData.byteLength > 0) await writer.write(rawClientData);
+        } finally {
+            writer.releaseLock();
         }
+        log(`TCP connected ${address}:${port}`);
+        return tcpSocket;
     }
 
     async function retry() {
