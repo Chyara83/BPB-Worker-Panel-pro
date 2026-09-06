@@ -18,14 +18,22 @@ export async function handleTCPOutBound(
         log(`TCP connect attempt ${address}:${port}`);
         const tcpSocket = connect({ hostname: address, port });
         remoteSocket.value = tcpSocket;
-        const writer = tcpSocket.writable.getWriter();
         try {
-            await writer.write(rawClientData);
-        } finally {
-            writer.releaseLock();
+            await tcpSocket.opened;
+            log(`TCP socket opened ${address}:${port}`);
+            const writer = tcpSocket.writable.getWriter();
+            try {
+                if (rawClientData && rawClientData.byteLength > 0) await writer.write(rawClientData);
+            } finally {
+                writer.releaseLock();
+            }
+            log(`TCP connected ${address}:${port}`);
+            return tcpSocket;
+        } catch (error) {
+            safeCloseTcpSocket(tcpSocket);
+            remoteSocket.value = null;
+            throw error;
         }
-        log(`TCP connected ${address}:${port}`);
-        return tcpSocket;
     }
 
     async function retry() {
@@ -56,26 +64,25 @@ export async function handleTCPOutBound(
             tcpSocket.closed
                 .catch(error => console.log('retry TCP socket closed error', error))
                 .finally(() => safeCloseWebSocket(webSocket));
-            remoteSocketToWS(tcpSocket, webSocket, VLResponseHeader, null, log);
+            await remoteSocketToWS(tcpSocket, webSocket, VLResponseHeader, null, log);
         } catch (error) {
             console.error('Retry connection failed:', error);
-            webSocket.close(1011, `Retry connection failed: ${safeErrorMessage(error)}`);
+            safeCloseWebSocket(webSocket);
+            throw new Error(`Retry connection failed: ${safeErrorMessage(error)}`, { cause: error });
         }
     }
 
     try {
         const tcpSocket = await connectAndWrite(addressRemote, portRemote);
-        remoteSocketToWS(tcpSocket, webSocket, VLResponseHeader, retry, log);
+        await remoteSocketToWS(tcpSocket, webSocket, VLResponseHeader, retry, log);
     } catch (error) {
         console.error(`Connection failed: ${safeErrorMessage(error)}`);
-        // The previous implementation only retried when the TCP socket connected
-        // but produced no response. If connect() itself fails, proxy/prefix retry
-        // was skipped completely. Try the configured fallback in that case too.
         const { proxyMode } = globalThis.wsConfig;
         if (proxyMode === 'proxyip' || proxyMode === 'prefix') {
             await retry();
         } else {
-            webSocket.close(1011, `Connection failed: ${safeErrorMessage(error)}`);
+            safeCloseWebSocket(webSocket);
+            throw new Error(`Connection failed: ${safeErrorMessage(error)}`, { cause: error });
         }
     }
 }
@@ -119,11 +126,12 @@ async function remoteSocketToWS(
         console.error('VLRemoteSocketToWS has exception.', error);
         safeCloseTcpSocket(remoteSocket);
         safeCloseWebSocket(webSocket);
+        throw error;
     }
 
     if (hasIncomingData === false && retry) {
         log(`retry`);
-        retry();
+        await retry();
     }
 }
 
@@ -136,9 +144,9 @@ export function makeReadableWebSocketStream(webSocketServer: WebSocket, earlyDat
                 controller.enqueue(event.data);
             });
             webSocketServer.addEventListener("close", () => {
-                safeCloseWebSocket(webSocketServer);
                 if (readableStreamCancel) return;
                 controller.close();
+                safeCloseWebSocket(webSocketServer);
             });
             webSocketServer.addEventListener("error", (err) => {
                 log("webSocketServer has error");
