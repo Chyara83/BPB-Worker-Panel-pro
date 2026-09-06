@@ -21,7 +21,13 @@ export default {
             if (pathName === '/panel/external-configs' || pathName.startsWith('/panel/external-configs/')) return await handleCommercialExternalConfigs(request, env);
             if (pathName.startsWith('/sub/external/')) return await handleExternalConfigSubscription(request, env);
             switch (path) {
-                case 'panel': return enhanceCommercialPanel(await handlePanel(request, env));
+                case 'panel': {
+                    const response = enhanceCommercialPanel(await handlePanel(request, env));
+                    const headers = new Headers(response.headers);
+                    headers.set('Cache-Control', 'no-store, private, max-age=0');
+                    headers.set('X-BPB-Commercial-UI', 'v2');
+                    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+                }
                 case 'sub': if (pathName.startsWith('/sub/user/')) return await handleCommercialUserSub(request, env); return await handleSubscriptions(request, env);
                 case 'login': return await handleLogin(request, env); case 'logout': return logout(); case 'secrets': return await renderSecrets(); case 'favicon.ico': return await serveIcon(); case 'dns-query': return await handleDoH(request); case 'proxy-ip': return await handleProxyIPs(request, env); default: return await fallback(request);
             }
