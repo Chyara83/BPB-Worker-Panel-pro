@@ -17,8 +17,10 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
     let address = "";
     let portWithRandomLog = "";
     let usageGuard: UserUsageGuard | null = null;
+    let stage = 'websocket_accepted';
     const log = (info: string, event?: string) => console.log(`[${address}:${portWithRandomLog}] ${info}`, event || "");
     const earlyDataHeader = request.headers.get("sec-websocket-protocol") || "";
+    console.log({ event: 'vless_stage', stage, earlyDataHeaderLength: earlyDataHeader.length });
     const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
     let remoteSocketWapper: { value: Socket | null } = { value: null };
     let udpStreamWrite: any = null;
@@ -26,50 +28,72 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
 
     const writableStream = new WritableStream({
         async write(chunk) {
+            stage = 'first_data_received';
+            console.log({ event: 'vless_stage', stage, chunkBytes: byteLength(chunk) });
             if (usageGuard) usageGuard.track(byteLength(chunk));
             if (isDns && udpStreamWrite) return udpStreamWrite(chunk);
             if (remoteSocketWapper.value) {
+                stage = 'existing_tcp_write';
                 const writer = remoteSocketWapper.value.writable.getWriter();
                 await writer.write(chunk); writer.releaseLock(); return;
             }
-            const { userID } = globalThis.globalConfig;
-            const presentedUUID = extractUUID(chunk);
-            if (!presentedUUID) throw new Error("invalid user");
-            const user = await findUserByVlessUUID(presentedUUID, env);
-            if (user) {
-                if (getStatus(user) !== 'active') throw new Error(`user ${getStatus(user)}`);
-                usageGuard = new UserUsageGuard(user, env, webSocket);
-                await usageGuard.start();
-                const originalSend = webSocket.send.bind(webSocket);
-                webSocket.send = (data: any) => {
-                    usageGuard?.track(byteLength(data));
-                    originalSend(data);
-                };
-            } else if (presentedUUID !== userID) {
-                throw new Error("invalid user");
-            }
-            const { hasError, message, portRemote = 443, addressRemote = "", rawDataIndex, VLVersion = new Uint8Array([0, 0]), isUDP } = parseVlHeader(chunk, user?.vlessUUID || userID!);
-            address = addressRemote;
-            portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? "udp " : "tcp "} `;
-            if (hasError) throw new Error(message);
-            const VLResponseHeader = new Uint8Array([VLVersion[0], 0]);
-            const rawClientData = chunk.slice(rawDataIndex);
-            if (isUDP) {
-                if (portRemote === 53) {
-                    isDns = true;
-                    const { write } = await handleUDPOutBound(webSocket, VLResponseHeader, log);
-                    udpStreamWrite = write;
-                    await udpStreamWrite(rawClientData);
-                    return;
+            try {
+                stage = 'uuid_extract';
+                const { userID } = globalThis.globalConfig;
+                const presentedUUID = extractUUID(chunk);
+                if (!presentedUUID) throw new Error("invalid user");
+                console.log({ event: 'vless_stage', stage: 'uuid_extracted' });
+
+                stage = 'kv_user_lookup';
+                const user = await findUserByVlessUUID(presentedUUID, env);
+                console.log({ event: 'vless_user_lookup', found: !!user, status: user ? getStatus(user) : 'none' });
+                if (user) {
+                    if (getStatus(user) !== 'active') throw new Error(`user ${getStatus(user)}`);
+                    stage = 'usage_guard_start';
+                    usageGuard = new UserUsageGuard(user, env, webSocket);
+                    await usageGuard.start();
+                    console.log({ event: 'vless_stage', stage: 'usage_guard_started' });
+                    const originalSend = webSocket.send.bind(webSocket);
+                    webSocket.send = (data: any) => {
+                        usageGuard?.track(byteLength(data));
+                        originalSend(data);
+                    };
+                } else if (presentedUUID !== userID) {
+                    throw new Error("invalid user");
                 }
-                throw new Error("UDP proxy only enable for DNS which is port 53");
+
+                stage = 'vless_header_parse';
+                const { hasError, message, portRemote = 443, addressRemote = "", rawDataIndex, VLVersion = new Uint8Array([0, 0]), isUDP } = parseVlHeader(chunk, user?.vlessUUID || userID!);
+                address = addressRemote;
+                portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? "udp " : "tcp "} `;
+                console.log({ event: 'vless_header_parsed', hasError, addressType: typeof addressRemote === 'string' ? 'string' : typeof addressRemote, portRemote, isUDP: !!isUDP });
+                if (hasError) throw new Error(message);
+                const VLResponseHeader = new Uint8Array([VLVersion[0], 0]);
+                const rawClientData = chunk.slice(rawDataIndex);
+                if (isUDP) {
+                    if (portRemote === 53) {
+                        stage = 'dns_outbound';
+                        isDns = true;
+                        const { write } = await handleUDPOutBound(webSocket, VLResponseHeader, log);
+                        udpStreamWrite = write;
+                        await udpStreamWrite(rawClientData);
+                        return;
+                    }
+                    throw new Error("UDP proxy only enable for DNS which is port 53");
+                }
+                stage = 'tcp_outbound';
+                console.log({ event: 'vless_stage', stage });
+                await handleTCPOutBound(remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, VLResponseHeader, log);
+            } catch (error) {
+                console.error({ event: 'vless_write_failed', stage, message: String(error) });
+                throw error;
             }
-            await handleTCPOutBound(remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, VLResponseHeader, log);
         },
         async close() { safeCloseTcpSocket(remoteSocketWapper.value); if (usageGuard) await usageGuard.close(); },
         abort(reason) { log(`readableWebSocketStream is abort`, JSON.stringify(reason)); void usageGuard?.close(); }
     });
     readableWebSocketStream.pipeTo(writableStream).catch(error => {
+        console.error({ event: 'vless_pipe_failed', stage, message: String(error) });
         log("readableWebSocketStream pipeTo error", error);
         safeCloseTcpSocket(remoteSocketWapper.value);
         void usageGuard?.close();
