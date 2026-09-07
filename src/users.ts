@@ -64,8 +64,6 @@ export async function updateUser(username: string, updates: Partial<{ days: numb
     const user = await getUser(username, env);
     if (!user) return { success: false, message: 'User not found.' };
     if (updates.days !== undefined) {
-        // In the edit form, 0 means "do not extend the current expiry".
-        // Positive values extend the subscription; negative/non-finite values remain invalid.
         if (!Number.isFinite(updates.days) || updates.days < 0 || updates.days > 3650) return { success: false, message: 'Invalid subscription duration.' };
         if (updates.days > 0) {
             const now = Date.now();
@@ -107,14 +105,31 @@ export async function findUserBySubPath(subPath: string, env: Env): Promise<User
     for (const username of index) { const user = await getUser(username, env); if (user && user.subPath === subPath) return user; }
     return null;
 }
+
 export async function findUserByVlessUUID(uuid: string, env: Env): Promise<UserData | null> {
     const username = await env.kv.get(`user:vless:${uuid}`);
-    const user = username ? await getUser(username, env) : null;
-    return user;
+    if (username) {
+        const user = await getUser(username, env);
+        if (user) return user;
+    }
+
+    // KV reads are eventually consistent across Cloudflare edge locations.
+    // If the credential index is temporarily stale, fall back to the authoritative
+    // users index and compare the stored UUID before rejecting the connection.
+    const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
+    for (const name of index) {
+        const user = await getUser(name, env);
+        if (user?.vlessUUID === uuid) return user;
+    }
+    return null;
 }
+
 export async function findUserByTrojanPassword(passwordHash: string, env: Env): Promise<UserData | null> {
     const username = await env.kv.get(`user:trojan-hash:${passwordHash}`);
-    if (username) return await getUser(username, env);
+    if (username) {
+        const user = await getUser(username, env);
+        if (user) return user;
+    }
     const index: string[] = await env.kv.get('users:index', { type: 'json' }) || [];
     for (const name of index) {
         const user = await getUser(name, env);
