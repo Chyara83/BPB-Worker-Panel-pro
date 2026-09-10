@@ -53,13 +53,20 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
                 stage = 'kv_user_lookup';
                 const { userID } = globalThis.globalConfig;
                 const user = await findUserByVlessUUID(presentedUUID, env);
-                console.log({ event: 'vless_user_lookup', found: !!user, status: user ? getStatus(user) : 'none' });
+                console.log({
+                    event: 'vless_user_lookup',
+                    found: !!user,
+                    status: user ? getStatus(user) : 'none',
+                    matchesPanelUUID: presentedUUID === userID,
+                    presentedUUIDFingerprint: uuidFingerprint(presentedUUID),
+                    panelUUIDFingerprint: userID ? uuidFingerprint(userID) : null
+                });
                 if (user) {
                     if (getStatus(user) !== 'active') throw new Error(`user ${getStatus(user)}`);
                     stage = 'usage_guard_start';
                     usageGuard = new UserUsageGuard(user, env, webSocket);
                     await usageGuard.start();
-                    console.log({ event: 'vless_stage', stage: 'usage_guard_started' });
+                    console.log({ event: 'vless_stage', stage: 'usage_guard_started', username: user.username });
                     const originalSend = webSocket.send.bind(webSocket);
                     webSocket.send = (data: any) => { usageGuard?.track(byteLength(data)); originalSend(data); };
                 } else if (presentedUUID !== userID) throw new Error("invalid user");
@@ -126,6 +133,10 @@ function concatArrayBuffers(a: ArrayBuffer, b: ArrayBuffer): ArrayBuffer {
 function extractUUID(VLBuffer: ArrayBuffer): string | null {
     if (VLBuffer.byteLength < 17) return null;
     try { return stringify(new Uint8Array(VLBuffer.slice(1, 17))); } catch { return null; }
+}
+
+function uuidFingerprint(uuid: string): string {
+    return `${uuid.slice(0, 8)}…${uuid.slice(-4)}`;
 }
 
 function parseVlHeader(VLBuffer: ArrayBuffer, userID: string) {
