@@ -47,8 +47,18 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
                     console.log({ event: 'vless_stage', stage: 'waiting_for_uuid', bufferedBytes: requestData.byteLength });
                     return;
                 }
-                const presentedUUID = extractUUID(requestData);
-                if (!presentedUUID) throw new Error("invalid user");
+                const uuidInfo = extractUUID(requestData);
+                if (!uuidInfo.uuid) {
+                    console.error({
+                        event: 'vless_uuid_extract_failed',
+                        firstByte: uuidInfo.firstByte,
+                        candidateUUIDFingerprint: uuidInfo.fingerprint,
+                        candidateUUIDFormatValid: uuidInfo.formatValid,
+                        bufferedBytes: requestData.byteLength
+                    });
+                    throw new Error("invalid user");
+                }
+                const presentedUUID = uuidInfo.uuid;
                 console.log({ event: 'vless_stage', stage: 'uuid_extracted' });
                 stage = 'kv_user_lookup';
                 const { userID } = globalThis.globalConfig;
@@ -130,9 +140,16 @@ function concatArrayBuffers(a: ArrayBuffer, b: ArrayBuffer): ArrayBuffer {
     return result.buffer;
 }
 
-function extractUUID(VLBuffer: ArrayBuffer): string | null {
-    if (VLBuffer.byteLength < 17) return null;
-    try { return stringify(new Uint8Array(VLBuffer.slice(1, 17))); } catch { return null; }
+function extractUUID(VLBuffer: ArrayBuffer): { uuid: string | null; firstByte: number; fingerprint: string; formatValid: boolean } {
+    const bytes = new Uint8Array(VLBuffer);
+    if (bytes.byteLength < 17) return { uuid: null, firstByte: bytes[0] ?? -1, fingerprint: '', formatValid: false };
+    const candidate = unsafeStringify(bytes, 1);
+    return {
+        uuid: isValidUUID(candidate) ? candidate : null,
+        firstByte: bytes[0],
+        fingerprint: `${candidate.slice(0, 8)}…${candidate.slice(-4)}`,
+        formatValid: isValidUUID(candidate)
+    };
 }
 
 function uuidFingerprint(uuid: string): string {
