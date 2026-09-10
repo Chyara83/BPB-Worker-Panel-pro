@@ -6,8 +6,8 @@ import { safeCloseTcpSocket, handleTCPOutBound, makeReadableWebSocketStream, WS_
 export async function VlOverWSHandler(request: Request, env: Env): Promise<Response> {
     const webSocketPair = new WebSocketPair();
     const [client, webSocket] = Object.values(webSocketPair);
-    webSocket.accept({ allowHalfOpen: true });
     webSocket.binaryType = 'arraybuffer';
+    webSocket.accept({ allowHalfOpen: true });
     let address = "";
     let portWithRandomLog = "";
     let usageGuard: UserUsageGuard | null = null;
@@ -19,13 +19,15 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
     let remoteSocketWapper: { value: Socket | null } = { value: null };
     let udpStreamWrite: any = null;
     let isDns = false;
+    let pendingVlessData: ArrayBuffer | null = null;
     const releaseUsage = () => { void usageGuard?.close(); };
     webSocket.addEventListener('close', releaseUsage);
     webSocket.addEventListener('error', releaseUsage);
+
     const writableStream = new WritableStream({
         async write(chunk) {
             stage = 'first_data_received';
-            console.log({ event: 'vless_stage', stage, chunkBytes: byteLength(chunk) });
+            console.log({ event: 'vless_stage', stage, chunkBytes: byteLength(chunk), pendingBytes: pendingVlessData?.byteLength || 0 });
             if (usageGuard) usageGuard.track(byteLength(chunk));
             if (isDns && udpStreamWrite) return udpStreamWrite(chunk);
             if (remoteSocketWapper.value) {
@@ -34,13 +36,22 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
                 try { await writer.write(chunk); } finally { writer.releaseLock(); }
                 return;
             }
+
+            const currentData = toArrayBuffer(chunk);
+            const requestData = pendingVlessData ? concatArrayBuffers(pendingVlessData, currentData) : currentData;
+            pendingVlessData = requestData;
+
             try {
                 stage = 'uuid_extract';
-                const { userID } = globalThis.globalConfig;
-                const presentedUUID = extractUUID(chunk);
+                if (requestData.byteLength < 17) {
+                    console.log({ event: 'vless_stage', stage: 'waiting_for_uuid', bufferedBytes: requestData.byteLength });
+                    return;
+                }
+                const presentedUUID = extractUUID(requestData);
                 if (!presentedUUID) throw new Error("invalid user");
                 console.log({ event: 'vless_stage', stage: 'uuid_extracted' });
                 stage = 'kv_user_lookup';
+                const { userID } = globalThis.globalConfig;
                 const user = await findUserByVlessUUID(presentedUUID, env);
                 console.log({ event: 'vless_user_lookup', found: !!user, status: user ? getStatus(user) : 'none' });
                 if (user) {
@@ -52,14 +63,21 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
                     const originalSend = webSocket.send.bind(webSocket);
                     webSocket.send = (data: any) => { usageGuard?.track(byteLength(data)); originalSend(data); };
                 } else if (presentedUUID !== userID) throw new Error("invalid user");
+
                 stage = 'vless_header_parse';
-                const { hasError, message, portRemote = 443, addressRemote = "", rawDataIndex, VLVersion = new Uint8Array([0, 0]), isUDP } = parseVlHeader(chunk, user?.vlessUUID || userID!);
+                const parsed = parseVlHeader(requestData, user?.vlessUUID || userID!);
+                if (parsed.incomplete) {
+                    console.log({ event: 'vless_stage', stage: 'waiting_for_header', bufferedBytes: requestData.byteLength });
+                    return;
+                }
+                const { hasError, message, portRemote = 443, addressRemote = "", rawDataIndex, VLVersion = new Uint8Array([0, 0]), isUDP } = parsed;
+                pendingVlessData = null;
                 address = addressRemote;
                 portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? "udp " : "tcp "} `;
                 console.log({ event: 'vless_header_parsed', hasError, portRemote, isUDP: !!isUDP, addressPresent: !!addressRemote });
                 if (hasError) throw new Error(message);
                 const VLResponseHeader = new Uint8Array([VLVersion[0], 0]);
-                const rawClientData = chunk.slice(rawDataIndex);
+                const rawClientData = requestData.slice(rawDataIndex);
                 if (isUDP) {
                     if (portRemote === 53) {
                         stage = 'dns_outbound';
@@ -82,6 +100,7 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
         async close() { safeCloseTcpSocket(remoteSocketWapper.value); if (usageGuard) await usageGuard.close(); },
         abort(reason) { log(`readableWebSocketStream is abort`, JSON.stringify(reason)); void usageGuard?.close(); }
     });
+
     readableWebSocketStream.pipeTo(writableStream).catch(error => {
         console.error({ event: 'vless_pipe_failed', stage, message: String(error) });
         log("readableWebSocketStream pipeTo error", error);
@@ -91,33 +110,84 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
     return new Response(null, { status: 101, webSocket: client });
 }
 
-function extractUUID(VLBuffer: ArrayBuffer): string | null { if (VLBuffer.byteLength < 17) return null; try { return stringify(new Uint8Array(VLBuffer.slice(1, 17))); } catch { return null; } }
+function toArrayBuffer(value: any): ArrayBuffer {
+    if (value instanceof ArrayBuffer) return value;
+    if (ArrayBuffer.isView(value)) return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+    throw new Error('invalid websocket binary data');
+}
+
+function concatArrayBuffers(a: ArrayBuffer, b: ArrayBuffer): ArrayBuffer {
+    const result = new Uint8Array(a.byteLength + b.byteLength);
+    result.set(new Uint8Array(a), 0);
+    result.set(new Uint8Array(b), a.byteLength);
+    return result.buffer;
+}
+
+function extractUUID(VLBuffer: ArrayBuffer): string | null {
+    if (VLBuffer.byteLength < 17) return null;
+    try { return stringify(new Uint8Array(VLBuffer.slice(1, 17))); } catch { return null; }
+}
+
 function parseVlHeader(VLBuffer: ArrayBuffer, userID: string) {
-    if (VLBuffer.byteLength < 24) return { hasError: true, message: "invalid data" };
+    if (VLBuffer.byteLength < 18) return { incomplete: true as const };
     const version = new Uint8Array(VLBuffer.slice(0, 1));
     const slicedBuffer = new Uint8Array(VLBuffer.slice(1, 17));
     const slicedBufferString = stringify(slicedBuffer);
-    if (slicedBufferString !== userID) return { hasError: true, message: "invalid user" };
+    if (slicedBufferString !== userID) return { hasError: true, message: "invalid user", incomplete: false as const };
+
     const optLength = new Uint8Array(VLBuffer.slice(17, 18))[0];
-    const command = new Uint8Array(VLBuffer.slice(18 + optLength, 18 + optLength + 1))[0];
+    const commandIndex = 18 + optLength;
+    if (VLBuffer.byteLength < commandIndex + 1) return { incomplete: true as const };
+    const command = new Uint8Array(VLBuffer.slice(commandIndex, commandIndex + 1))[0];
     let isUDP = false;
-    if (command === 1) {} else if (command === 2) isUDP = true; else return { hasError: true, message: `command ${command} is not supported, command 01-tcp,02-udp,03-mux` };
+    if (command === 1) {} else if (command === 2) isUDP = true; else return { hasError: true, message: `command ${command} is not supported, command 01-tcp,02-udp,03-mux`, incomplete: false as const };
+
     const portIndex = 19 + optLength;
+    if (VLBuffer.byteLength < portIndex + 3) return { incomplete: true as const };
     const portRemote = new DataView(VLBuffer.slice(portIndex, portIndex + 2)).getUint16(0);
     const addressIndex = portIndex + 2;
     const addressType = new Uint8Array(VLBuffer.slice(addressIndex, addressIndex + 1))[0];
     let addressLength = 0, addressValueIndex = addressIndex + 1, addressValue = "";
     switch (addressType) {
-        case 1: addressLength = 4; addressValue = new Uint8Array(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join("."); break;
-        case 2: addressLength = new Uint8Array(VLBuffer.slice(addressValueIndex, addressValueIndex + 1))[0]; addressValueIndex += 1; addressValue = new TextDecoder().decode(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength)); break;
-        case 3: { addressLength = 16; const dataView = new DataView(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength)); const ipv6 = []; for (let i = 0; i < 8; i++) ipv6.push(dataView.getUint16(i * 2).toString(16)); addressValue = ipv6.join(":"); break; }
-        default: return { hasError: true, message: `invalid addressType is ${addressType}` };
+        case 1:
+            addressLength = 4;
+            if (VLBuffer.byteLength < addressValueIndex + addressLength) return { incomplete: true as const };
+            addressValue = new Uint8Array(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join(".");
+            break;
+        case 2:
+            if (VLBuffer.byteLength < addressValueIndex + 1) return { incomplete: true as const };
+            addressLength = new Uint8Array(VLBuffer.slice(addressValueIndex, addressValueIndex + 1))[0];
+            addressValueIndex += 1;
+            if (VLBuffer.byteLength < addressValueIndex + addressLength) return { incomplete: true as const };
+            addressValue = new TextDecoder().decode(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+            break;
+        case 3:
+            addressLength = 16;
+            if (VLBuffer.byteLength < addressValueIndex + addressLength) return { incomplete: true as const };
+            const dataView = new DataView(VLBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+            const ipv6 = [];
+            for (let i = 0; i < 8; i++) ipv6.push(dataView.getUint16(i * 2).toString(16));
+            addressValue = ipv6.join(":");
+            break;
+        default:
+            return { hasError: true, message: `invalid addressType is ${addressType}`, incomplete: false as const };
     }
-    if (!addressValue) return { hasError: true, message: `addressValue is empty, addressType is ${addressType}` };
-    return { hasError: false, addressRemote: addressValue, addressType, portRemote, rawDataIndex: addressValueIndex + addressLength, VLVersion: version, isUDP };
+    if (!addressValue) return { hasError: true, message: `addressValue is empty, addressType is ${addressType}`, incomplete: false as const };
+    return { hasError: false, addressRemote: addressValue, addressType, portRemote, rawDataIndex: addressValueIndex + addressLength, VLVersion: version, isUDP, incomplete: false as const };
 }
-function unsafeStringify(arr: Uint8Array, offset = 0) { const byteToHex: string[] = []; for (let i = 0; i < 256; ++i) byteToHex.push((i + 256).toString(16).slice(1)); return (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + "-" + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + "-" + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase(); }
-function stringify(arr: Uint8Array, offset = 0) { const uuid = unsafeStringify(arr, offset); if (!isValidUUID(uuid)) throw TypeError("Stringified UUID is invalid"); return uuid; }
+
+function unsafeStringify(arr: Uint8Array, offset = 0) {
+    const byteToHex: string[] = [];
+    for (let i = 0; i < 256; ++i) byteToHex.push((i + 256).toString(16).slice(1));
+    return (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + "-" + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + "-" + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
+}
+
+function stringify(arr: Uint8Array, offset = 0) {
+    const uuid = unsafeStringify(arr, offset);
+    if (!isValidUUID(uuid)) throw TypeError("Stringified UUID is invalid");
+    return uuid;
+}
+
 async function handleUDPOutBound(webSocket: WebSocket, VLResponseHeader: Uint8Array<ArrayBuffer>, log: Function) {
     let isVLHeaderSent = false;
     const transformStream = new TransformStream({ transform(chunk, controller) { for (let index = 0; index < chunk.byteLength;) { const lengthBuffer = chunk.slice(index, index + 2); const udpPakcetLength = new DataView(lengthBuffer).getUint16(0); const udpData = new Uint8Array(chunk.slice(index + 2, index + 2 + udpPakcetLength)); index += 2 + udpPakcetLength; controller.enqueue(udpData); } } });
