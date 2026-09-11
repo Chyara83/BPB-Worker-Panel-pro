@@ -48,13 +48,26 @@ export async function VlOverWSHandler(request: Request, env: Env): Promise<Respo
                     return;
                 }
                 const uuidInfo = extractUUID(requestData);
+                console.log({
+                    event: 'vless_uuid_extract_result',
+                    firstByte: uuidInfo.firstByte,
+                    candidateUUIDFingerprint: uuidInfo.fingerprint,
+                    candidateUUIDFormatValid: uuidInfo.formatValid,
+                    uuidVersionNibble: uuidInfo.versionNibble,
+                    uuidVariantNibble: uuidInfo.variantNibble,
+                    bufferedBytes: requestData.byteLength,
+                    extractionError: uuidInfo.error
+                });
                 if (!uuidInfo.uuid) {
                     console.error({
                         event: 'vless_uuid_extract_failed',
                         firstByte: uuidInfo.firstByte,
                         candidateUUIDFingerprint: uuidInfo.fingerprint,
                         candidateUUIDFormatValid: uuidInfo.formatValid,
-                        bufferedBytes: requestData.byteLength
+                        uuidVersionNibble: uuidInfo.versionNibble,
+                        uuidVariantNibble: uuidInfo.variantNibble,
+                        bufferedBytes: requestData.byteLength,
+                        extractionError: uuidInfo.error
                     });
                     throw new Error("invalid user");
                 }
@@ -140,16 +153,47 @@ function concatArrayBuffers(a: ArrayBuffer, b: ArrayBuffer): ArrayBuffer {
     return result.buffer;
 }
 
-function extractUUID(VLBuffer: ArrayBuffer): { uuid: string | null; firstByte: number; fingerprint: string; formatValid: boolean } {
+function extractUUID(VLBuffer: ArrayBuffer): {
+    uuid: string | null;
+    firstByte: number;
+    fingerprint: string;
+    formatValid: boolean;
+    uuidVersionNibble: number | null;
+    uuidVariantNibble: number | null;
+    error: string | null;
+} {
     const bytes = new Uint8Array(VLBuffer);
-    if (bytes.byteLength < 17) return { uuid: null, firstByte: bytes[0] ?? -1, fingerprint: '', formatValid: false };
-    const candidate = unsafeStringify(bytes, 1);
-    return {
-        uuid: isValidUUID(candidate) ? candidate : null,
-        firstByte: bytes[0],
-        fingerprint: `${candidate.slice(0, 8)}…${candidate.slice(-4)}`,
-        formatValid: isValidUUID(candidate)
-    };
+    const firstByte = bytes[0] ?? -1;
+    if (bytes.byteLength < 17) {
+        return { uuid: null, firstByte, fingerprint: '', formatValid: false, uuidVersionNibble: null, uuidVariantNibble: null, error: 'buffered data is shorter than 17 bytes' };
+    }
+
+    try {
+        const candidate = unsafeStringify(bytes, 1);
+        const formatValid = isValidUUID(candidate);
+        const uuidVersionNibble = (bytes[7] ?? 0) >> 4;
+        const uuidVariantNibble = (bytes[9] ?? 0) >> 4;
+        const fingerprint = `${candidate.slice(0, 8)}…${candidate.slice(-4)}`;
+        return {
+            uuid: formatValid ? candidate : null,
+            firstByte,
+            fingerprint,
+            formatValid,
+            uuidVersionNibble,
+            uuidVariantNibble,
+            error: null
+        };
+    } catch (error) {
+        return {
+            uuid: null,
+            firstByte,
+            fingerprint: '',
+            formatValid: false,
+            uuidVersionNibble: null,
+            uuidVariantNibble: null,
+            error: error instanceof Error ? error.message : String(error)
+        };
+    }
 }
 
 function uuidFingerprint(uuid: string): string {
